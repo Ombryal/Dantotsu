@@ -10,7 +10,8 @@ if (gradle.startParameter.taskNames.any { it.contains("google", true) }) {
     apply(plugin = "com.google.firebase.crashlytics")
 }
 
-val baseVersion = "3.2.2"
+// Starting Kagura fresh at 1.0.0 - we're not continuing Dantotsu's version history.
+val baseVersion = "1.0.0"
 
 fun computeGitCommitHash(): String {
     val envHash = System.getenv("COMMIT_HASH")
@@ -43,11 +44,17 @@ fun computeGitCommitHash(): String {
 val gitCommitHash = computeGitCommitHash()
 
 android {
-    namespace = "ani.dantotsu"
+    // This is the important bit for being a real standalone app: a namespace/applicationId
+    // that's different from Dantotsu's "ani.dantotsu" means Android treats Kagura as a
+    // completely separate app - separate install, separate storage, no collisions.
+    // We're intentionally NOT renaming every "package ani.dantotsu" line inside the
+    // 580-odd source files yet - that's cosmetic only and doesn't affect this at all.
+    // It'll happen later as an automated pass.
+    namespace = "ani.kagura"
     compileSdk = 37
 
     defaultConfig {
-        applicationId = "ani.dantotsu"
+        applicationId = "ani.kagura"
         minSdk = 26
         targetSdk = 36
 
@@ -75,11 +82,16 @@ android {
     productFlavors {
         create("fdroid") {
             dimension = "store"
-            versionNameSuffix = "-fdroid"
+            // Making fdroid the default flavor for now. The "google" flavor below still
+            // points at Dantotsu's own Firebase project via google-services.json, which
+            // we don't have access to - building it as-is would either fail or send crash
+            // data to someone else's project. Leaving the plumbing in place, but we'll
+            // either wire up your own Firebase project or rip Firebase out entirely in a
+            // dedicated commit. Until then, build the fdroid flavor.
+            isDefault = true
         }
         create("google") {
             dimension = "store"
-            isDefault = true
         }
     }
 
