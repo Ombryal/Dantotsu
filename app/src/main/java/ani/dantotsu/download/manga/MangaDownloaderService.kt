@@ -81,6 +81,11 @@ class MangaDownloaderService : Service() {
     private val serviceScope = CoroutineScope(SupervisorJob() + Dispatchers.Default)
     private val downloadJobs = mutableMapOf<String, Job>()
     private val mutex = Mutex()
+    // Guards `builder` + notificationManager.notify - with parallel chapter/page
+    // downloads enabled, multiple coroutines were mutating the same Builder at
+    // once with no synchronization, so the progress notification could end up
+    // showing a mix of two different chapters' progress, or crash outright.
+    private val notificationMutex = Mutex()
     private var queueJob: Job? = null
     private val queueMutex = Mutex()
 
@@ -237,11 +242,11 @@ class MangaDownloaderService : Service() {
         }
     }
 
-    private fun updateNotification() {
+    private suspend fun updateNotification() = notificationMutex.withLock {
         val pendingDownloads = MangaServiceDataSingleton.downloadQueue.size + MangaServiceDataSingleton.currentTasks.size
         if (pendingDownloads <= 0 && downloadJobs.isEmpty()) {
             notificationManager.cancel(NOTIFICATION_ID)
-            return
+            return@withLock
         }
         val text = if (pendingDownloads > 0) {
             "Pending downloads: $pendingDownloads"
@@ -254,7 +259,7 @@ class MangaDownloaderService : Service() {
                 Manifest.permission.POST_NOTIFICATIONS
             ) != PackageManager.PERMISSION_GRANTED
         ) {
-            return
+            return@withLock
         }
         notificationManager.notify(NOTIFICATION_ID, builder.build())
     }
@@ -280,10 +285,12 @@ class MangaDownloaderService : Service() {
                 }
 
                 val deferredMap = mutableMapOf<Int, Deferred<Bitmap?>>()
-                builder.setContentText("Downloading ${task.title} - ${task.chapter}")
-                if (notifi) {
-                    withContext(Dispatchers.Main) {
-                        notificationManager.notify(NOTIFICATION_ID, builder.build())
+                notificationMutex.withLock {
+                    builder.setContentText("Downloading ${task.title} - ${task.chapter}")
+                    if (notifi) {
+                        withContext(Dispatchers.Main) {
+                            notificationManager.notify(NOTIFICATION_ID, builder.build())
+                        }
                     }
                 }
 
@@ -334,8 +341,10 @@ class MangaDownloaderService : Service() {
                         val writtenBytes = saveToDisk("${index.ofLength(3)}.jpg", outputDir, bitmap)
                         downloadedBytes += writtenBytes
                         farthest++
-
-                        builder.setProgress(task.imageData.size, farthest, false)
+                        // Already on disk - no reason to keep the full decoded page
+                        // around until GC gets to it, especially with several of
+                        // these in flight at once.
+                        if (!bitmap.isRecycled) bitmap.recycle()
 
                         val estimatedTotalBytes = SizeFormatter.estimateTotalBytesByFraction(
                             downloadedBytes,
@@ -356,9 +365,12 @@ class MangaDownloaderService : Service() {
                             downloadedBytes,
                             estimatedTotalBytes
                         )
-                        if (notifi) {
-                            withContext(Dispatchers.Main) {
-                                notificationManager.notify(NOTIFICATION_ID, builder.build())
+                        notificationMutex.withLock {
+                            builder.setProgress(task.imageData.size, farthest, false)
+                            if (notifi) {
+                                withContext(Dispatchers.Main) {
+                                    notificationManager.notify(NOTIFICATION_ID, builder.build())
+                                }
                             }
                         }
                         bitmap
@@ -368,10 +380,12 @@ class MangaDownloaderService : Service() {
                 deferredMap.values.awaitAll()
 
                 withContext(Dispatchers.Main) {
-                    builder.setContentText("${task.title} - ${task.chapter} Download complete")
-                        .setProgress(0, 0, false)
-                    if (notifi) {
-                        notificationManager.notify(NOTIFICATION_ID, builder.build())
+                    notificationMutex.withLock {
+                        builder.setContentText("${task.title} - ${task.chapter} Download complete")
+                            .setProgress(0, 0, false)
+                        if (notifi) {
+                            notificationManager.notify(NOTIFICATION_ID, builder.build())
+                        }
                     }
                 }
 
