@@ -55,6 +55,37 @@ class ReaderSettingsDialogFragment : BottomSheetDialogFragment() {
         settings.direction = settings.direction ?: CurrentReaderSettings.Directions.TOP_TO_BOTTOM
         settings.dualPageMode = settings.dualPageMode ?: CurrentReaderSettings.DualPageModes.Automatic
 
+        // Hides settings that don't apply to the current layout, instead of
+        // showing all ~25 toggles regardless of whether they do anything right
+        // now. Deliberately conservative - only hides sections whose relevance
+        // to the current layout is unambiguous, so nothing genuinely useful
+        // ever disappears on a guess.
+        fun updateProgressiveDisclosure() {
+            val isPaged = settings.layout == CurrentReaderSettings.Layouts.PAGED
+            val isContinuous = settings.layout == CurrentReaderSettings.Layouts.CONTINUOUS
+
+            // Dual-page spreads are a paged-book concept - nothing to pair up
+            // once pages are purely stacked vertically in Continuous mode.
+            val dualPageVisibility = if (isContinuous) View.GONE else View.VISIBLE
+            binding.dualPageRow.visibility = dualPageVisibility
+            binding.dualPageInfoText.visibility = dualPageVisibility
+
+            // Padding between pages and auto-scrolling only mean something once
+            // pages are actually stacked in a continuous scroll - there's
+            // nothing to space out or scroll through automatically in Paged.
+            val continuousOnlyVisibility = if (isPaged) View.GONE else View.VISIBLE
+            binding.continuousPaddingRow.visibility = continuousOnlyVisibility
+            binding.readerContinuousPaddingSlider.visibility = continuousOnlyVisibility
+            binding.readerPadding.visibility = continuousOnlyVisibility
+            binding.readerAutoScroll.visibility = continuousOnlyVisibility
+
+            // The speed slider only matters once auto-scroll is actually on.
+            val speedVisible = continuousOnlyVisibility == View.VISIBLE && settings.autoScroll
+            binding.readerAutoScrollSpeedLayout.visibility = if (speedVisible) View.VISIBLE else View.GONE
+            binding.readerAutoScrollSpeedSlider.visibility = if (speedVisible) View.VISIBLE else View.GONE
+        }
+        updateProgressiveDisclosure()
+
         // Close button
         binding.closeReaderSheet.setOnClickListener { dismiss() }
 
@@ -130,6 +161,7 @@ class ReaderSettingsDialogFragment : BottomSheetDialogFragment() {
                 binding.readerSheetSubtitle.text = layoutText
                 activity.applySettings()
                 paddingAvailable(settings.layout.ordinal != 0)
+                updateProgressiveDisclosure()
             }
         }
 
@@ -210,6 +242,7 @@ class ReaderSettingsDialogFragment : BottomSheetDialogFragment() {
         binding.readerAutoScroll.setOnCheckedChangeListener { _, isChecked ->
             settings.autoScroll = isChecked
             activity.updateAutoScrollState(isChecked)
+            updateProgressiveDisclosure()
         }
 
         binding.readerAutoScrollSpeedSlider.value = settings.autoScrollSpeed.toFloat()
