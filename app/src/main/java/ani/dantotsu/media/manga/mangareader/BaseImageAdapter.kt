@@ -294,12 +294,29 @@ abstract class BaseImageAdapter(
                 setOnLongClickListener {
                     val pos = holder.bindingAdapterPosition
                     val targetItem = items.getOrNull(pos)
-                    val image = when (targetItem) {
-                        is ReaderItem.Page -> targetItem.image
-                        is ReaderItem.DualPage -> targetItem.first
-                        else -> null
-                    } ?: return@setOnLongClickListener false
-                    activity.onImageLongClicked(pos, image, null) { dialog ->
+                    var img1: MangaImage? = null
+                    var img2: MangaImage? = null
+                    when (targetItem) {
+                        is ReaderItem.Page -> img1 = targetItem.image
+                        is ReaderItem.DualPage -> {
+                            // Match the reading direction, same as the continuous-mode
+                            // long-press below - otherwise RTL spreads get saved backwards.
+                            val rtl = settings.direction != CurrentReaderSettings.Directions.LEFT_TO_RIGHT
+                            if (rtl && targetItem.second != null) {
+                                img1 = targetItem.second
+                                img2 = targetItem.first
+                            } else {
+                                img1 = targetItem.first
+                                img2 = targetItem.second
+                            }
+                        }
+                        else -> {}
+                    }
+                    val finalImg1 = img1 ?: return@setOnLongClickListener false
+                    // Grab whatever's already decoded and on screen for this page so the
+                    // view dialog doesn't have to re-download + re-decode it from scratch.
+                    val currentBitmap = view.getTag(R.id.imgProgImageNoGestures) as? Bitmap
+                    activity.onImageLongClicked(pos, finalImg1, img2, currentBitmap) { dialog ->
                         activity.lifecycleScope.launch {
                             loadImage(pos, view)
                         }
