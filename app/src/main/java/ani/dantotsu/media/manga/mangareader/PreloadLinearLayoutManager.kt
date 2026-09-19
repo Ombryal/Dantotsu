@@ -45,10 +45,20 @@ class PreloadLinearLayoutManager(context: Context, orientation: Int, reverseLayo
                     layoutPrefetchRegistry.addPosition(it, max(0, scrollingOffset))
                 }
             }
+        } else {
+            // This branch was missing entirely - scrolling backward (re-reading
+            // earlier pages) never preloaded anything, only forward scrolling did.
+            val scrollingOffset =
+                (mOrientationHelper.startAfterPadding - mOrientationHelper.getDecoratedStart(child))
+            ((currentPosition - 1) downTo (currentPosition - preloadItemCount)).forEach {
+                if (it >= 0 && it < state.itemCount) {
+                    layoutPrefetchRegistry.addPosition(it, max(0, scrollingOffset))
+                }
+            }
         }
     }
 
     private fun getChildClosest(layoutDirection: Int): View? {
         return getChildAt(if (layoutDirection == -1) 0 else childCount - 1)
     }
-}
+    }
