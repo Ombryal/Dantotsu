@@ -143,9 +143,12 @@ class OcrTranslationBottomSheet : BottomSheetDialogFragment() {
             val image = InputImage.fromBitmap(safeBitmap, 0)
 
             // 1. Attempt Japanese text recognition first
+            // TextRecognizer holds real native resources (the on-device model) - .use{}
+            // makes sure it's closed after this one recognition instead of leaking on
+            // every OCR attempt.
             var text = try {
-                val jpRecognizer = TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
-                processWithRecognizer(jpRecognizer, image)
+                TextRecognition.getClient(JapaneseTextRecognizerOptions.Builder().build())
+                    .use { jpRecognizer -> processWithRecognizer(jpRecognizer, image) }
             } catch (e: Exception) {
                 e.printStackTrace()
                 ""
@@ -154,8 +157,8 @@ class OcrTranslationBottomSheet : BottomSheetDialogFragment() {
             // 2. Fallback to default Latin recognizer if Japanese produces blank text or fails
             if (text.isBlank()) {
                 text = try {
-                    val latinRecognizer = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
-                    processWithRecognizer(latinRecognizer, image)
+                    TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS)
+                        .use { latinRecognizer -> processWithRecognizer(latinRecognizer, image) }
                 } catch (e: Exception) {
                     e.printStackTrace()
                     ""
@@ -240,6 +243,9 @@ class OcrTranslationBottomSheet : BottomSheetDialogFragment() {
 
     override fun onDestroy() {
         super.onDestroy()
+        // This bitmap was decoded solely for this dialog's OCR pass and isn't shown
+        // or shared anywhere else, so there's no reason to leave it for GC.
+        currentBitmap?.let { if (!it.isRecycled) it.recycle() }
         currentBitmap = null
     }
 
