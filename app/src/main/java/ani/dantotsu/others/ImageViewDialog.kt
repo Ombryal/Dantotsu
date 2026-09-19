@@ -12,7 +12,6 @@ import ani.dantotsu.BottomSheetDialogFragment
 import ani.dantotsu.FileUrl
 import ani.dantotsu.R
 import ani.dantotsu.databinding.BottomSheetImageBinding
-import ani.dantotsu.media.manga.MangaCache
 import ani.dantotsu.media.manga.mangareader.BaseImageAdapter.Companion.loadBitmap
 import ani.dantotsu.media.manga.mangareader.BaseImageAdapter.Companion.loadBitmapOld
 import ani.dantotsu.media.manga.mangareader.BaseImageAdapter.Companion.mergeBitmap
@@ -26,8 +25,6 @@ import ani.dantotsu.util.StoragePermissions.Companion.downloadsPermission
 import com.bumptech.glide.load.resource.bitmap.BitmapTransformation
 import com.davemorrissey.labs.subscaleview.ImageSource
 import kotlinx.coroutines.launch
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
 
 class ImageViewDialog : BottomSheetDialogFragment() {
 
@@ -98,17 +95,11 @@ class ImageViewDialog : BottomSheetDialogFragment() {
             if (preloaded != null && !preloaded.isRecycled) {
                 bitmap = preloaded
             } else {
-                val mangaCache = try { Injekt.get<MangaCache>() } catch (_: Exception) { null }
-                bitmap = mangaCache?.getBitmap(image.url)
-                bitmap2 = if (image2 != null) mangaCache?.getBitmap(image2.url) else null
-
+                bitmap = context.loadBitmap(image, trans1 ?: listOf())
                 if (bitmap == null) {
-                    bitmap = context.loadBitmap(image, trans1 ?: listOf())
-                    if (bitmap == null) {
-                        bitmap = context.loadBitmapOld(image, trans1 ?: listOf())
-                    }
+                    bitmap = context.loadBitmapOld(image, trans1 ?: listOf())
                 }
-                if (image2 != null && bitmap2 == null) {
+                if (image2 != null) {
                     bitmap2 = context.loadBitmap(image2, trans2 ?: listOf())
                     if (bitmap2 == null) {
                         bitmap2 = context.loadBitmapOld(image2, trans2 ?: listOf())
