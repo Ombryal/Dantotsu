@@ -779,6 +779,10 @@ class MangaReaderActivity : AppCompatActivity() {
                             child ?: return@let false
                             val frameLayout = child as? GestureFrameLayout ?: return@let false
                             val pos = binding.mangaReaderRecycler.getChildAdapterPosition(child)
+                            // Already decoded and sitting in the view - no need to make the
+                            // view dialog fetch it all over again.
+                            val currentBitmap =
+                                frameLayout.getTag(R.id.imgProgImageNoGestures) as? Bitmap
                             val callback: (ImageViewDialog) -> Unit = { dialog ->
                                 lifecycleScope.launch {
                                     imageAdapter?.loadImage(
@@ -796,13 +800,14 @@ class MangaReaderActivity : AppCompatActivity() {
                                     chapter.dualPages().getOrNull(pos) ?: return@dualPage false
                                 val nextPage = page.second
                                 if (defaultSettings.direction != LEFT_TO_RIGHT && nextPage != null)
-                                    onImageLongClicked(pos * 2, nextPage, page.first, callback)
+                                    onImageLongClicked(pos * 2, nextPage, page.first, currentBitmap, callback)
                                 else
-                                    onImageLongClicked(pos * 2, page.first, nextPage, callback)
+                                    onImageLongClicked(pos * 2, page.first, nextPage, currentBitmap, callback)
                             } ?: onImageLongClicked(
                                 pos,
                                 chapImages.getOrNull(pos) ?: return@let false,
                                 null,
+                                currentBitmap,
                                 callback
                             )
                         }
@@ -1476,6 +1481,7 @@ class MangaReaderActivity : AppCompatActivity() {
         pos: Int,
         img1: MangaImage,
         img2: MangaImage?,
+        currentBitmap: Bitmap? = null,
         callback: ((ImageViewDialog) -> Unit)? = null
     ): Boolean {
         if (!defaultSettings.longClickImage) return false
@@ -1483,7 +1489,20 @@ class MangaReaderActivity : AppCompatActivity() {
             chaptersTitleArr.getOrNull(currentChapterIndex)?.replace(" : ", " - ") ?: ""
         } [${media.userPreferredName}]"
 
-        ImageViewDialog.newInstance(title, img1.url, true, img2?.url).apply {
+        // Hand the dialog a safe copy of what's already on screen (cheap in-memory
+        // blit) instead of letting it re-download and re-decode the same page - this
+        // was causing a duplicate full-res decode on every single long-press, and for
+        // dual-page spreads it was one of the bigger contributors to the reader's
+        // memory pressure.
+        val preload = currentBitmap?.takeIf { !it.isRecycled }?.let {
+            try {
+                it.copy(it.config ?: Bitmap.Config.ARGB_8888, false)
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        ImageViewDialog.newInstance(title, img1.url, true, img2?.url, preload).apply {
             val transforms1 = mutableListOf<BitmapTransformation>()
             val parserTransformation1 = getTransformation(img1)
             if (parserTransformation1 != null) transforms1.add(parserTransformation1)
