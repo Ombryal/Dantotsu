@@ -66,7 +66,6 @@ import ani.dantotsu.util.customAlertDialog
 import com.google.android.material.appbar.AppBarLayout
 import eu.kanade.tachiyomi.extension.manga.model.MangaExtension
 import eu.kanade.tachiyomi.source.ConfigurableSource
-import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -280,7 +279,7 @@ open class MangaReadFragment : Fragment(), ScanlatorSelectionListener {
     }
 
     fun multiDownload(n: Int) {
-        lifecycleScope.launch {
+        viewLifecycleOwner.lifecycleScope.launch {
             // Get the last viewed chapter
             val selected = media.userProgress ?: 0
             val chapters = media.manga?.chapters?.values?.toList()
@@ -556,7 +555,13 @@ open class MangaReadFragment : Fragment(), ScanlatorSelectionListener {
                     val parser =
                         model.mangaReadSources?.get(media.selected!!.sourceIndex) as? DynamicMangaParser
                     parser?.let {
-                        CoroutineScope(Dispatchers.IO).launch {
+                        // This used to be an unscoped CoroutineScope(Dispatchers.IO) - it had
+                        // nothing tying it to the fragment, so if you backed out of the screen
+                        // before it finished fetching the image list, it just kept running,
+                        // holding onto this fragment (and its context) for as long as the
+                        // network call took. Tying it to the view's lifecycle means it gets
+                        // cancelled the moment there's no screen left to update.
+                        viewLifecycleOwner.lifecycleScope.launch(Dispatchers.IO) {
                             try {
                                 val images = parser.imageList(chapter.sChapter)
 
@@ -584,7 +589,9 @@ open class MangaReadFragment : Fragment(), ScanlatorSelectionListener {
                                 MangaServiceDataSingleton.isServiceRunning = true
                             } catch (e: Exception) {
                                 withContext(Dispatchers.Main) {
-                                    chapterAdapter.purgeDownload(uniqueNum)
+                                    if (this@MangaReadFragment::chapterAdapter.isInitialized) {
+                                        chapterAdapter.purgeDownload(uniqueNum)
+                                    }
                                 }
                             }
                         }
