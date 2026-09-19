@@ -98,6 +98,9 @@ data class CurrentReaderSettings(
     companion object {
         private const val serialVersionUID: Long = 2L
 
+        /** [preloadAmount] value meaning "let the reader decide" instead of a fixed page count. */
+        const val AUTO_PRELOAD = -1
+
         fun applyWebtoon(settings: CurrentReaderSettings) {
             settings.apply {
                 layout = Layouts.CONTINUOUS

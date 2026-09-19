@@ -120,6 +120,7 @@ class MangaReaderActivity : AppCompatActivity() {
 
     var defaultSettings = CurrentReaderSettings()
     val autoScrollHelper = MangaReaderAutoScroll()
+    private val readAheadController = AdaptiveReadAheadController()
 
     private lateinit var media: Media
     private lateinit var chapter: MangaChapter
@@ -603,6 +604,7 @@ class MangaReaderActivity : AppCompatActivity() {
 
         binding.mangaReaderPager.unregisterOnPageChangeCallback(pageChangeCallback)
 
+        readAheadController.reset()
         currentChapterPage = PrefManager.getCustomVal("${media.id}_${chapter.number}", 1L)
 
         val chapImages = if (directionPagedBT) {
@@ -828,7 +830,7 @@ class MangaReaderActivity : AppCompatActivity() {
                     RecyclerView.HORIZONTAL,
                 directionRLBT
             )
-            manager.preloadItemCount = 2
+            manager.preloadItemCount = resolvedPreloadCount()
 
             binding.mangaReaderPager.visibility = View.GONE
 
@@ -1277,6 +1279,11 @@ class MangaReaderActivity : AppCompatActivity() {
         }
         if (currentChapterPage != page) {
             currentChapterPage = page
+            readAheadController.recordPageTurn()
+            if (defaultSettings.preloadAmount == CurrentReaderSettings.AUTO_PRELOAD) {
+                val layoutManager = binding.mangaReaderRecycler.layoutManager as? PreloadLinearLayoutManager
+                layoutManager?.preloadItemCount = resolvedPreloadCount()
+            }
             triggerEInkFlash()
             val chapNum = chapter.number
             val seq = synchronized(pagePersistLock) { ++pagePersistSeq }
@@ -1577,11 +1584,26 @@ class MangaReaderActivity : AppCompatActivity() {
         }
     }
 
+    /**
+     * A manual preload amount is used as-is; AUTO_PRELOAD defers to the adaptive
+     * controller's current recommendation based on real decode speed and reading
+     * velocity for this session.
+     */
+    private fun resolvedPreloadCount(): Int =
+        if (defaultSettings.preloadAmount == CurrentReaderSettings.AUTO_PRELOAD)
+            readAheadController.recommendedPreloadCount()
+        else
+            defaultSettings.preloadAmount
+
+    fun recordPageDecodeTime(ms: Long) {
+        readAheadController.recordPageDecodeTime(ms)
+    }
+
     fun updatePreloadAmount(amount: Int) {
         defaultSettings.preloadAmount = amount
         saveCurrentSettings()
         val layoutManager = binding.mangaReaderRecycler.layoutManager as? PreloadLinearLayoutManager
-        layoutManager?.preloadItemCount = amount
+        layoutManager?.preloadItemCount = resolvedPreloadCount()
     }
 
     fun updateAutoScrollState(enabled: Boolean) {
