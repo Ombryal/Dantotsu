@@ -17,7 +17,9 @@ import ani.dantotsu.media.MediaNameAdapter
 import ani.dantotsu.setAnimation
 import ani.dantotsu.util.SizeFormatter
 import ani.dantotsu.util.customAlertDialog
+import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import java.text.SimpleDateFormat
 import java.util.Date
@@ -57,6 +59,11 @@ class MangaChapterAdapter(
     }
 
     override fun getItemCount(): Int = arr.size
+
+    override fun onViewRecycled(holder: RecyclerView.ViewHolder) {
+        if (holder is ChapterListViewHolder) holder.stopRotation()
+        super.onViewRecycled(holder)
+    }
 
     inner class ChapterCompactViewHolder(val binding: ItemEpisodeCompactBinding) :
         RecyclerView.ViewHolder(binding.root) {
@@ -217,7 +224,9 @@ class MangaChapterAdapter(
 
     inner class ChapterListViewHolder(val binding: ItemChapterListBinding) :
         RecyclerView.ViewHolder(binding.root) {
-        private val activeCoroutines = mutableSetOf<String>()
+        private var rotationJob: Job? = null
+        private var rotationKey: String? = null
+
         fun bind(chapter: MangaChapter, progress: String?) {
             val chapterNumber = chapter.uniqueNumber()
             if (progress != null) {
@@ -237,42 +246,47 @@ class MangaChapterAdapter(
             if (activeDownloads.contains(chapterNumber) || activeDownloads.contains(chapter.number)) {
                 // Show spinner
                 binding.itemDownload.setImageResource(R.drawable.ic_sync)
-                startOrContinueRotation(chapter) {
-                    binding.itemDownload.rotation = 0f
-                }
-            } else if (isDownloaded(chapter)) {
-                // Show delete icon
-                binding.itemDownload.setImageResource(R.drawable.ic_round_delete_24)
-                binding.itemDownload.rotation = 0f
+                startOrContinueRotation(chapter)
             } else {
-                // Show download icon
-                binding.itemDownload.setImageResource(R.drawable.ic_download_24)
+                // Whatever was spinning here belonged to a different chapter (this
+                // holder got recycled/rebound) or download activity just ended -
+                // either way, stop it before it animates the wrong row.
+                stopRotation()
+                if (isDownloaded(chapter)) {
+                    // Show delete icon
+                    binding.itemDownload.setImageResource(R.drawable.ic_round_delete_24)
+                } else {
+                    // Show download icon
+                    binding.itemDownload.setImageResource(R.drawable.ic_download_24)
+                }
                 binding.itemDownload.rotation = 0f
             }
-
         }
 
-        private fun startOrContinueRotation(chapter: MangaChapter, resetRotation: () -> Unit) {
+        private fun startOrContinueRotation(chapter: MangaChapter) {
             val key = chapter.uniqueNumber()
-            if (!isRotationCoroutineRunningFor(key)) {
-                val scope = fragment.lifecycle.coroutineScope
-                scope.launch {
-                    activeCoroutines.add(key)
-                    while (activeDownloads.contains(chapter.uniqueNumber()) || activeDownloads.contains(chapter.number)) {
-                        binding.itemDownload.animate().rotationBy(360f).setDuration(1000)
-                            .setInterpolator(
-                                LinearInterpolator()
-                            ).start()
-                        delay(1000)
-                    }
-                    activeCoroutines.remove(key)
-                    resetRotation()
+            // Already spinning for this exact chapter (e.g. a progress-update rebind) -
+            // let it keep going instead of restarting the animation from scratch.
+            if (rotationKey == key && rotationJob?.isActive == true) return
+
+            rotationJob?.cancel()
+            rotationKey = key
+            rotationJob = fragment.lifecycle.coroutineScope.launch {
+                while (isActive && (activeDownloads.contains(chapter.uniqueNumber()) || activeDownloads.contains(chapter.number))) {
+                    binding.itemDownload.animate().rotationBy(360f).setDuration(1000)
+                        .setInterpolator(
+                            LinearInterpolator()
+                        ).start()
+                    delay(1000)
                 }
+                binding.itemDownload.rotation = 0f
             }
         }
 
-        private fun isRotationCoroutineRunningFor(chapterNumber: String): Boolean {
-            return chapterNumber in activeCoroutines
+        fun stopRotation() {
+            rotationJob?.cancel()
+            rotationJob = null
+            rotationKey = null
         }
 
         init {
