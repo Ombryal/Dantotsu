@@ -110,6 +110,7 @@ open class ImageAdapter(
             previousBitmap.recycle()
         }
 
+        val decodeStartedAt = System.currentTimeMillis()
         var bitmap = loadBitmap(position, parent)
         if (bitmap == null) {
             delay(350)
@@ -118,6 +119,7 @@ open class ImageAdapter(
         if (bitmap == null) {
             return false
         }
+        activity.recordPageDecodeTime(System.currentTimeMillis() - decodeStartedAt)
 
         if (!currentCoroutineContext().isActive) {
             if (!bitmap.isRecycled) bitmap.recycle()
