@@ -89,31 +89,41 @@ class ImageViewDialog : BottomSheetDialogFragment() {
 
             val preloaded = preloadedBitmap
             preloadedBitmap = null
-            val mangaCache = try { Injekt.get<MangaCache>() } catch (_: Exception) { null }
 
-            var bitmap = if (preloaded != null && !preloaded.isRecycled) {
-                preloaded
+            // A preloaded bitmap is already the final page - for spreads it's already
+            // merged too - so there's nothing left to fetch or combine.
+            var bitmap: android.graphics.Bitmap? = null
+            var bitmap2: android.graphics.Bitmap? = null
+
+            if (preloaded != null && !preloaded.isRecycled) {
+                bitmap = preloaded
             } else {
-                mangaCache?.getBitmap(image.url)
-            }
+                val mangaCache = try { Injekt.get<MangaCache>() } catch (_: Exception) { null }
+                bitmap = mangaCache?.getBitmap(image.url)
+                bitmap2 = if (image2 != null) mangaCache?.getBitmap(image2.url) else null
 
-            var bitmap2 = if (image2 != null) mangaCache?.getBitmap(image2.url) else null
-
-            if (bitmap == null) {
-                bitmap = context.loadBitmap(image, trans1 ?: listOf())
                 if (bitmap == null) {
-                    bitmap = context.loadBitmapOld(image, trans1 ?: listOf())
+                    bitmap = context.loadBitmap(image, trans1 ?: listOf())
+                    if (bitmap == null) {
+                        bitmap = context.loadBitmapOld(image, trans1 ?: listOf())
+                    }
                 }
-            }
-            if (image2 != null && bitmap2 == null) {
-                bitmap2 = context.loadBitmap(image2, trans2 ?: listOf())
-                if (bitmap2 == null) {
-                    bitmap2 = context.loadBitmapOld(image2, trans2 ?: listOf())
+                if (image2 != null && bitmap2 == null) {
+                    bitmap2 = context.loadBitmap(image2, trans2 ?: listOf())
+                    if (bitmap2 == null) {
+                        bitmap2 = context.loadBitmapOld(image2, trans2 ?: listOf())
+                    }
                 }
-            }
 
-            bitmap =
-                if (bitmap2 != null && bitmap != null) mergeBitmap(bitmap, bitmap2) else bitmap
+                if (bitmap2 != null && bitmap != null) {
+                    val merged = mergeBitmap(bitmap, bitmap2)
+                    // mergeBitmap draws both onto a new bitmap - the two originals are
+                    // dead weight after this and were never being freed.
+                    if (merged !== bitmap && !bitmap.isRecycled) bitmap.recycle()
+                    if (merged !== bitmap2 && !bitmap2.isRecycled) bitmap2.recycle()
+                    bitmap = merged
+                }
+            }
 
             if (bitmap != null) {
                 binding.bottomImageShare.isEnabled = true
