@@ -1,4 +1,4 @@
-name: Build Debug APK
+name: Build ARM64 Debug APK
 
 on:
   workflow_dispatch:
@@ -8,28 +8,32 @@ jobs:
     runs-on: ubuntu-latest
 
     steps:
-      - name: Clone GitLab dev
-        run: |
-          git clone --branch dev --single-branch \
-            https://git.rebelonion.dev/rebelonion/Dantotsu.git repo
+      - name: Checkout
+        uses: actions/checkout@v4
 
-      - name: Set up JDK
+      - name: Setup Java
         uses: actions/setup-java@v4
         with:
           distribution: temurin
-          java-version: 17
+          java-version: 21
 
-      - name: Set up Android SDK
-        uses: android-actions/setup-android@v3
+      - name: Configure ARM64 only
+        run: |
+          sed -i 's/include("armeabi-v7a", "arm64-v8a", "x86", "x86_64")/include("arm64-v8a")/' app/build.gradle.kts
+          sed -i 's/isUniversalApk = true/isUniversalApk = false/' app/build.gradle.kts
 
-      - name: Build debug APK
-        working-directory: repo
+      - name: Build ARM64 Debug APK
         run: |
           chmod +x gradlew
-          ./gradlew assembleDebug
+          ./gradlew assembleGoogleDebug
+
+      - name: Show APK location
+        run: |
+          find . -type f -name "*.apk" -print
 
       - name: Upload APK
         uses: actions/upload-artifact@v4
         with:
-          name: Dantotsu-debug
-          path: repo/**/build/outputs/apk/debug/*.apk
+          name: Dantotsu-arm64-debug
+          path: "**/build/outputs/apk/**/*.apk"
+          if-no-files-found: error
