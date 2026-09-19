@@ -3,6 +3,7 @@ package ani.dantotsu.media.manga.mangareader
 import android.annotation.SuppressLint
 import android.content.Context
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Color
 import android.graphics.Canvas
 import android.net.Uri
@@ -32,6 +33,7 @@ import ani.dantotsu.parsers.MangaImage
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import kotlinx.coroutines.withTimeoutOrNull
 import uy.kohesive.injekt.api.get
 import java.io.File
 import java.io.InputStream
@@ -462,6 +464,75 @@ abstract class BaseImageAdapter(
                         transformed
                     }
                 }
+            }
+        }
+
+        /**
+         * Best-effort tiny/fast preview of a page, meant only to paint something
+         * instantly while the real, full-quality decode above is still working.
+         * Every branch is wrapped and the whole thing is time-boxed - if anything
+         * here fails or takes too long, callers just get null and fall back to
+         * the plain spinner exactly like before this existed. This must never be
+         * able to make a page load slower than it already was.
+         */
+        suspend fun Context.loadPlaceholderBitmap(link: FileUrl): Bitmap? {
+            return withTimeoutOrNull(900) {
+                withContext(Dispatchers.IO) {
+                    try {
+                        when {
+                            link.url.startsWith("file://") -> {
+                                decodeSampledLocalFile(link.url.removePrefix("file://"))
+                            }
+                            link.url.startsWith("content://") -> {
+                                contentResolver.openInputStream(Uri.parse(link.url))
+                                    ?.use { decodeSampledStream(it) }
+                            }
+                            File(link.url).exists() -> {
+                                decodeSampledLocalFile(link.url)
+                            }
+                            else -> {
+                                // Network page - the full-res fetch below is what's
+                                // actually slow, so a genuinely smaller request (not
+                                // just a smaller decode of the same download) is the
+                                // only thing that actually paints faster. Reuses the
+                                // same resizing proxy already trusted for data saver,
+                                // independent of that setting.
+                                val placeholderUrl = "https://wsrv.nl/?url=" +
+                                    java.net.URLEncoder.encode(link.url, "UTF-8") +
+                                    "&w=48&q=40&output=jpg"
+                                try {
+                                    Glide.with(this@loadPlaceholderBitmap)
+                                        .asBitmap()
+                                        .load(GlideUrl(placeholderUrl) { link.headers })
+                                        .skipMemoryCache(true)
+                                        .diskCacheStrategy(DiskCacheStrategy.NONE)
+                                        .submit()
+                                        .get()
+                                } catch (_: Exception) {
+                                    null
+                                }
+                            }
+                        }
+                    } catch (_: Exception) {
+                        null
+                    }
+                }
+            }
+        }
+
+        private fun decodeSampledLocalFile(path: String): Bitmap? {
+            return try {
+                BitmapFactory.decodeFile(path, BitmapFactory.Options().apply { inSampleSize = 8 })
+            } catch (_: Exception) {
+                null
+            }
+        }
+
+        private fun decodeSampledStream(stream: InputStream): Bitmap? {
+            return try {
+                BitmapFactory.decodeStream(stream, null, BitmapFactory.Options().apply { inSampleSize = 8 })
+            } catch (_: Exception) {
+                null
             }
         }
 
