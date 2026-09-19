@@ -10,15 +10,12 @@ import androidx.core.content.ContextCompat
 import ani.dantotsu.BottomSheetDialogFragment
 import ani.dantotsu.R
 import ani.dantotsu.databinding.BottomSheetCurrentReaderSettingsBinding
-import ani.dantotsu.media.manga.MangaCache
 import ani.dantotsu.settings.CurrentReaderSettings
 import ani.dantotsu.settings.CurrentReaderSettings.Directions
 import ani.dantotsu.settings.saving.PrefManager
 import ani.dantotsu.settings.saving.PrefName
 import ani.dantotsu.getThemeColor
 import com.google.android.material.slider.Slider
-import uy.kohesive.injekt.Injekt
-import uy.kohesive.injekt.api.get
 
 import com.google.android.material.bottomsheet.BottomSheetBehavior
 
@@ -407,7 +404,6 @@ class ReaderSettingsDialogFragment : BottomSheetDialogFragment() {
                 settings.dataSaverMode = index
                 binding.dataSaverModeText.text = dataSaverModeNames[index]
                 PrefManager.setVal(PrefName.DataSaverMode, index)
-                try { Injekt.get<MangaCache>().clearBitmaps() } catch (_: Exception) {}
                 activity.applySettings()
             }
         }
@@ -425,7 +421,6 @@ class ReaderSettingsDialogFragment : BottomSheetDialogFragment() {
                 settings.dataSaverImageQuality = q
                 PrefManager.setVal(PrefName.DataSaverImageQuality, q)
                 binding.dataSaverQualityLabel.text = "${getString(R.string.data_saver_quality)} ($q%)"
-                try { Injekt.get<MangaCache>().clearBitmaps() } catch (_: Exception) {}
                 activity.applySettings()
             }
         })
@@ -433,21 +428,18 @@ class ReaderSettingsDialogFragment : BottomSheetDialogFragment() {
         binding.dataSaverIgnoreJpeg.setOnCheckedChangeListener { _, isChecked ->
             settings.dataSaverIgnoreJpeg = isChecked
             PrefManager.setVal(PrefName.DataSaverIgnoreJpeg, isChecked)
-            try { Injekt.get<MangaCache>().clearBitmaps() } catch (_: Exception) {}
             activity.applySettings()
         }
 
         binding.dataSaverIgnoreGif.setOnCheckedChangeListener { _, isChecked ->
             settings.dataSaverIgnoreGif = isChecked
             PrefManager.setVal(PrefName.DataSaverIgnoreGif, isChecked)
-            try { Injekt.get<MangaCache>().clearBitmaps() } catch (_: Exception) {}
             activity.applySettings()
         }
 
         binding.dataSaverImageFormat.setOnCheckedChangeListener { _, isChecked ->
             settings.dataSaverImageFormatJpeg = isChecked
             PrefManager.setVal(PrefName.DataSaverImageFormatJpeg, isChecked)
-            try { Injekt.get<MangaCache>().clearBitmaps() } catch (_: Exception) {}
             activity.applySettings()
         }
     }
