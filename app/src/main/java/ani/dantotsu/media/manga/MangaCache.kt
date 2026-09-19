@@ -149,12 +149,6 @@ fun saveImage(
 class MangaCache {
     private val maxEntries = 500
     private val cache = LruCache<String, ImageData>(maxEntries)
-    private val cacheSizeKb = ((Runtime.getRuntime().maxMemory() / 1024) / 8).toInt().coerceIn(32 * 1024, 96 * 1024)
-    private val bitmapCache = object : LruCache<String, Bitmap>(cacheSizeKb) {
-        override fun sizeOf(key: String, value: Bitmap): Int {
-            return (value.byteCount / 1024).coerceAtLeast(1)
-        }
-    }
 
     @Synchronized
     fun put(key: String, imageDate: ImageData) {
@@ -167,29 +161,13 @@ class MangaCache {
     @Synchronized
     fun remove(key: String) {
         cache.remove(key)
-        bitmapCache.remove(key)
     }
 
     @Synchronized
     fun clear() {
         cache.evictAll()
-        bitmapCache.evictAll()
-    }
-
-    @Synchronized
-    fun putBitmap(key: String, bitmap: Bitmap) {
-        bitmapCache.put(key, bitmap)
-    }
-
-    @Synchronized
-    fun getBitmap(key: String): Bitmap? = bitmapCache.get(key)
-
-    @Synchronized
-    fun clearBitmaps() {
-        bitmapCache.evictAll()
     }
 
     fun size(): Int = cache.size()
-
 
 }
