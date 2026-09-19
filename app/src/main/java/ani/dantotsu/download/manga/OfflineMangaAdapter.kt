@@ -37,8 +37,16 @@ class OfflineMangaAdapter(
         return position.toLong()
     }
 
+    override fun getViewTypeCount(): Int = 2
+
+    override fun getItemViewType(position: Int): Int = if (style == 0) 0 else 1
+
     override fun getView(position: Int, convertView: View?, parent: ViewGroup?): View {
 
+        // convertView is only ever one Android gives back for the same
+        // getItemViewType() - without that override, switching between large and
+        // compact view handed back a row still inflated from the *other* layout,
+        // and findViewById() for the missing views returned null further down.
         val view: View = convertView ?: when (style) {
             0 -> inflater.inflate(R.layout.item_media_large, parent, false) // large view
             1 -> inflater.inflate(R.layout.item_media_compact, parent, false) // compact view
